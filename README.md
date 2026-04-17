@@ -32,13 +32,8 @@ Este proyecto es una lista de contactos totalmente funcional con CRUD completo, 
 3. Usa los botones de editar o eliminar en cada tarjeta.
 4. Recarga la pagina para comprobar que los datos siguen guardados.
 
-## GitHub Pages
-Para publicar este proyecto en GitHub Pages:
-1. Entra al repositorio en GitHub.
-2. Ve a `Settings` > `Pages`.
-3. En `Build and deployment`, selecciona `Deploy from a branch`.
-4. Elige la rama `main` y la carpeta `/root`.
-5. Guarda los cambios y espera a que GitHub genere la URL publica.
+## Demo en GitHub Pages
+https://victorzapata0612.github.io/Taller-DOM/
 
 ## Autor
 - VictorZapata0612
