@@ -257,7 +257,7 @@ function createContactCard(contact) {
   editBtn.type = "button";
   editBtn.className = "icon-btn edit";
   editBtn.dataset.action = "edit";
-  editBtn.textContent = "✏";
+  editBtn.textContent = "✏ Editar";
   editBtn.ariaLabel = "Editar contacto";
   editBtn.title = "Editar";
 
@@ -265,7 +265,7 @@ function createContactCard(contact) {
   deleteBtn.type = "button";
   deleteBtn.className = "icon-btn delete";
   deleteBtn.dataset.action = "delete";
-  deleteBtn.textContent = "🗑";
+  deleteBtn.textContent = "🗑 Eliminar";
   deleteBtn.ariaLabel = "Eliminar contacto";
   deleteBtn.title = "Eliminar";
 
