@@ -152,6 +152,12 @@ body {
   letter-spacing: 0.03em;
 }
 
+.hero-note {
+  margin: -0.45rem 0 0;
+  color: rgba(248, 250, 252, 0.78);
+  font-size: 0.95rem;
+}
+
 .panel {
   background: transparent;
   border: 0;
