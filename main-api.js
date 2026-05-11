@@ -1,4 +1,4 @@
-﻿const STORAGE_KEY = "contactos";
+const API_URL = "/api/contacts";
 
 const state = {
   contacts: [],
@@ -41,10 +41,18 @@ init();
 
 function init() {
   bindEvents();
-  simulateBootLoad(() => {
-    loadContacts();
-    renderContacts();
-    showApp();
+  simulateBootLoad(async () => {
+    try {
+      await loadContacts();
+      renderContacts();
+    } catch (error) {
+      console.error(error);
+      showToast("No se pudo cargar la API. Revisa que el servidor este activo.");
+      state.contacts = [];
+      renderContacts();
+    } finally {
+      showApp();
+    }
   });
 }
 
@@ -65,7 +73,7 @@ function showApp() {
   els.app.setAttribute("aria-hidden", "false");
 }
 
-function handleSubmit(event) {
+async function handleSubmit(event) {
   event.preventDefault();
   clearErrors();
 
@@ -77,21 +85,29 @@ function handleSubmit(event) {
     return;
   }
 
-  withActionLoader(() => {
-    let message = "Contacto agregado correctamente.";
+  try {
+    await withActionLoader(async () => {
+      let message = "Contacto agregado correctamente.";
 
-    if (state.editingId === null) {
-      addContact(contactData);
-    } else {
-      updateContact(state.editingId, contactData);
-      message = "Contacto actualizado correctamente.";
-    }
+      if (state.editingId === null) {
+        const savedContact = await createContact(contactData);
+        state.contacts.unshift(savedContact);
+      } else {
+        const updatedContact = await updateContact(state.editingId, contactData);
+        state.contacts = state.contacts.map((contact) =>
+          contact.id === updatedContact.id ? updatedContact : contact,
+        );
+        message = "Contacto actualizado correctamente.";
+      }
 
-    persistContacts();
-    renderContacts();
-    resetFormToCreateMode();
-    showToast(message);
-  });
+      renderContacts();
+      resetFormToCreateMode();
+      showToast(message);
+    });
+  } catch (error) {
+    console.error(error);
+    showToast("No se pudo guardar el contacto.");
+  }
 }
 
 function readFormData() {
@@ -149,49 +165,6 @@ function clearErrors() {
   Object.values(els.errors).forEach((errorEl) => {
     errorEl.textContent = "";
   });
-}
-
-function addContact(data) {
-  const newContact = {
-    id: Date.now(),
-    firstName: data.firstName,
-    lastName: data.lastName,
-    phone: data.phone,
-    city: data.city,
-    address: data.address,
-    gender: data.gender,
-  };
-
-  state.contacts.unshift(newContact);
-}
-
-function updateContact(id, data) {
-  state.contacts = state.contacts.map((contact) => {
-    if (contact.id !== id) {
-      return contact;
-    }
-
-    return {
-      ...contact,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      phone: data.phone,
-      city: data.city,
-      address: data.address,
-      gender: data.gender,
-    };
-  });
-}
-
-function deleteContact(id) {
-  state.contacts = state.contacts.filter((contact) => contact.id !== id);
-  persistContacts();
-  renderContacts();
-  showToast("Contacto eliminado correctamente.");
-
-  if (state.editingId === id) {
-    resetFormToCreateMode();
-  }
 }
 
 function renderContacts() {
@@ -290,13 +263,7 @@ function createMetaRow(label, value) {
   return item;
 }
 
-function buildInitials(firstName, lastName) {
-  const first = firstName ? firstName.charAt(0).toUpperCase() : "?";
-  const last = lastName ? lastName.charAt(0).toUpperCase() : "?";
-  return `${first}${last}`;
-}
-
-function handleListActions(event) {
+async function handleListActions(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
@@ -314,9 +281,22 @@ function handleListActions(event) {
     const confirmed = window.confirm("Seguro que quieres eliminar este contacto?");
     if (!confirmed) return;
 
-    withActionLoader(() => {
-      deleteContact(id);
-    });
+    try {
+      await withActionLoader(async () => {
+        await deleteContact(id);
+        state.contacts = state.contacts.filter((contact) => contact.id !== id);
+        renderContacts();
+
+        if (state.editingId === id) {
+          resetFormToCreateMode();
+        }
+
+        showToast("Contacto eliminado correctamente.");
+      });
+    } catch (error) {
+      console.error(error);
+      showToast("No se pudo eliminar el contacto.");
+    }
   }
 }
 
@@ -358,54 +338,131 @@ function resetFormToCreateMode() {
   els.cancelEdit.classList.add("hidden");
 }
 
-function clearAllContacts() {
+async function clearAllContacts() {
   if (state.contacts.length === 0) return;
 
   const confirmed = window.confirm("Se eliminaran todos los contactos. Continuar?");
   if (!confirmed) return;
 
-  withActionLoader(() => {
-    state.contacts = [];
-    persistContacts();
-    renderContacts();
-    resetFormToCreateMode();
-    showToast("Se eliminaron todos los contactos.");
-  });
+  try {
+    await withActionLoader(async () => {
+      await deleteAllContacts();
+      state.contacts = [];
+      renderContacts();
+      resetFormToCreateMode();
+      showToast("Se eliminaron todos los contactos.");
+    });
+  } catch (error) {
+    console.error(error);
+    showToast("No se pudieron eliminar todos los contactos.");
+  }
 }
 
-function loadContacts() {
-  const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("contacts");
-  const parsed = saved ? JSON.parse(saved) : [];
-  state.contacts = Array.isArray(parsed)
-    ? parsed.map((item) => ({
-        id: Number(item.id) || Date.now(),
+async function loadContacts() {
+  const response = await fetch(API_URL);
+
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar los contactos");
+  }
+
+  const data = await response.json();
+  state.contacts = Array.isArray(data)
+    ? data.map((item) => ({
+        id: Number(item.id),
         firstName: String(item.firstName || ""),
         lastName: String(item.lastName || ""),
         phone: String(item.phone || ""),
         city: String(item.city || ""),
         address: String(item.address || ""),
-        gender:
-          item.gender === "femenino" || item.gender === "female"
-            ? "femenino"
-            : "masculino",
+        gender: item.gender === "femenino" ? "femenino" : "masculino",
       }))
     : [];
 }
 
-function persistContacts() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.contacts));
+async function createContact(data) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo crear el contacto");
+  }
+
+  const savedContact = await response.json();
+  return {
+    id: Number(savedContact.id),
+    firstName: String(savedContact.firstName || ""),
+    lastName: String(savedContact.lastName || ""),
+    phone: String(savedContact.phone || ""),
+    city: String(savedContact.city || ""),
+    address: String(savedContact.address || ""),
+    gender: savedContact.gender === "femenino" ? "femenino" : "masculino",
+  };
+}
+
+async function updateContact(id, data) {
+  const response = await fetch(`${API_URL}/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo actualizar el contacto");
+  }
+
+  const updatedContact = await response.json();
+  return {
+    id: Number(updatedContact.id),
+    firstName: String(updatedContact.firstName || ""),
+    lastName: String(updatedContact.lastName || ""),
+    phone: String(updatedContact.phone || ""),
+    city: String(updatedContact.city || ""),
+    address: String(updatedContact.address || ""),
+    gender: updatedContact.gender === "femenino" ? "femenino" : "masculino",
+  };
+}
+
+async function deleteContact(id) {
+  const response = await fetch(`${API_URL}/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo eliminar el contacto");
+  }
+}
+
+async function deleteAllContacts() {
+  const response = await fetch(API_URL, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudieron eliminar los contactos");
+  }
 }
 
 function withActionLoader(work) {
   els.actionLoader.classList.remove("hidden");
 
-  window.setTimeout(() => {
-    try {
-      work();
-    } finally {
-      els.actionLoader.classList.add("hidden");
-    }
-  }, 280);
+  return new Promise((resolve, reject) => {
+    window.setTimeout(async () => {
+      try {
+        resolve(await work());
+      } catch (error) {
+        reject(error);
+      } finally {
+        els.actionLoader.classList.add("hidden");
+      }
+    }, 280);
+  });
 }
 
 function showToast(message) {
